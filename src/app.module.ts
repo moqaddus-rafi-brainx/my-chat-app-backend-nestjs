@@ -8,6 +8,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { MessageModule } from './message/message.module';
 
 @Module({
   imports: 
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
       useFactory: getDatabaseConfig,
     }),
     AuthModule,
+    MessageModule,
   ],
   controllers: [AppController],
   providers: [
