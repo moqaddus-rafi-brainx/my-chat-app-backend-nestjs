@@ -9,6 +9,8 @@ import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { MessageModule } from './message/message.module';
+import { ConversationModule } from './conversation/conversation.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: 
@@ -27,6 +29,8 @@ import { MessageModule } from './message/message.module';
     }),
     AuthModule,
     MessageModule,
+    ConversationModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [
