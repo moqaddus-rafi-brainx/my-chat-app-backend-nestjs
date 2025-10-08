@@ -13,17 +13,25 @@ export class UserService {
         @InjectModel(User.name) private userModel: Model<UserDocument>,
     ) {}
 
-    async findAll(query: any={}): Promise<User[]> {
+    async findAll(query: any={}) {
         const { search } = query;
+        
+        let users;
         
         // If no search term provided, return all users
         if (!search || typeof search !== 'string' || search.trim() === '') {
-            return this.userModel.find({}).exec();
+            users = await this.userModel.find({}).exec();
+        } else {
+            // Use regex search only when search term is a valid string
+            users = await this.userModel.find({ 
+                name: { $regex: search.trim(), $options: 'i' } 
+            }).exec();
         }
         
-        // Use regex search only when search term is a valid string
-        return this.userModel.find({ 
-            name: { $regex: search.trim(), $options: 'i' } 
-        }).exec();
+        return {
+            success: true,
+            message: 'Users retrieved successfully',
+            data: users,
+        };
     }
 }

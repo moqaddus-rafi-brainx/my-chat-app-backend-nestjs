@@ -8,7 +8,7 @@ export class MessageController {
   constructor(private readonly messageService: MessageService) {}
 
   @Post()
-  create(
+  async create(
     @Body() createMessageDto: CreateMessageDto,
     @CurrentUser() user: any,
   ) {
@@ -16,7 +16,7 @@ export class MessageController {
   }
 
   @Get('conversation/:conversationId')
-  findAllByConversation(@Param('conversationId') conversationId: string) {
+  async findAllByConversation(@Param('conversationId') conversationId: string) {
     return this.messageService.findAllByConversation(conversationId);
   }
 }

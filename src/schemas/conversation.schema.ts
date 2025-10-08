@@ -28,8 +28,12 @@ export class Conversation {
   })
   members: Types.ObjectId[];
 
-  @Prop({ default: Date.now })
-  createdAt: Date;
+  @Prop({ 
+    type: Types.ObjectId, 
+    ref: 'User',
+    required: false 
+  })
+  adminId?: Types.ObjectId;
 }
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
