@@ -14,6 +14,14 @@ export class Message {
   @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true })
   conversationId: Types.ObjectId;
 
+  @Prop({ default: false })
+  is_deleted: boolean;
+
+  @Prop({ default: false })
+  is_edited: boolean;
+
+  @Prop({ default: false })
+  is_pinned: boolean;
 
   @Prop({ default: Date.now })
   createdAt: Date;
