@@ -16,7 +16,9 @@ async function bootstrap() {
       process.env.FRONTEND_URL,
       'https://my-chat-app-frontend-two.vercel.app',
       'http://localhost:3000',
-      'http://localhost:3001'
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://localhost:5174'
     ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

@@ -26,7 +26,9 @@ import { User } from '../schemas/user.schema';
         process.env.CORS_ORIGIN,
         'https://my-chat-app-frontend-two.vercel.app',
         'http://localhost:3000',
-        'http://localhost:3001'
+        'http://localhost:3001',
+        'http://localhost:5173',
+        'http://localhost:5174'
       ].filter(Boolean),
       credentials: true,
     },

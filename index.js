@@ -2,22 +2,24 @@ const { NestFactory } = require('@nestjs/core');
 const { AppModule } = require('./dist/app.module');
 const { ValidationPipe } = require('@nestjs/common');
 const { IoAdapter } = require('@nestjs/platform-socket.io');
+const { Server } = require('socket.io');
 
 let app;
+let server;
+let io;
 
 async function createApp() {
   if (!app) {
     app = await NestFactory.create(AppModule);
-    
-    // Configure WebSocket adapter
-    app.useWebSocketAdapter(new IoAdapter(app));
     
     app.enableCors({
       origin: [
         process.env.CORS_ORIGIN,
         'https://my-chat-app-frontend-two.vercel.app',
         'http://localhost:3000',
-        'http://localhost:3001'
+        'http://localhost:3001',
+        'http://localhost:5173',
+        'http://localhost:5174'
       ].filter(Boolean),
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
@@ -33,8 +35,30 @@ async function createApp() {
     });
     
     await app.init();
+    
+    // Get the HTTP server instance
+    server = app.getHttpAdapter().getInstance();
+    
+    // Create Socket.IO server
+    io = new Server(server, {
+      cors: {
+        origin: [
+          process.env.CORS_ORIGIN,
+          'https://my-chat-app-frontend-two.vercel.app',
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://localhost:5173',
+          'http://localhost:5174'
+        ].filter(Boolean),
+        credentials: true,
+      },
+      path: '/socket.io/'
+    });
+    
+    // Configure WebSocket adapter with the Socket.IO server
+    app.useWebSocketAdapter(new IoAdapter(app, io));
   }
-  return app;
+  return { app, server, io };
 }
 
 module.exports = async (req, res) => {
@@ -48,7 +72,9 @@ module.exports = async (req, res) => {
       process.env.CORS_ORIGIN,
       'https://my-chat-app-frontend-two.vercel.app',
       'http://localhost:3000',
-      'http://localhost:3001'
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://localhost:5174'
     ].filter(Boolean);
 
     console.log('Allowed origins:', allowedOrigins);
@@ -75,10 +101,19 @@ module.exports = async (req, res) => {
     // Handle Socket.IO requests
     if (req.url.startsWith('/socket.io/')) {
       console.log('Handling Socket.IO request:', req.url);
+      const { server, io } = await createApp();
+      if (io) {
+        // Let Socket.IO handle the request
+        io.engine.handleRequest(req, res);
+        return;
+      } else {
+        console.error('Socket.IO server not available');
+        res.status(500).json({ error: 'Socket.IO server not available' });
+        return;
+      }
     }
 
-    const app = await createApp();
-    const server = app.getHttpAdapter().getInstance();
+    const { server } = await createApp();
     server(req, res);
   } catch (error) {
     console.error('Error in Vercel handler:', error);
