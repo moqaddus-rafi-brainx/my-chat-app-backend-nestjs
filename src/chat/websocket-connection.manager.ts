@@ -56,11 +56,29 @@ export class WebSocketConnectionManager {
   // Send event to specific user
   sendToUser(userId: string, event: string, data: any): boolean {
     const socket = this.getSocketForUser(userId);
-    if (socket && socket.connected) {
-      socket.emit(event, data);
-      console.log(`📤 Sent ${event} to user ${userId}`);
-      return true;
+    
+    // Debug logging
+    console.log(`🔍 Attempting to send ${event} to user ${userId}`);
+    console.log(`🔍 Socket found: ${socket ? 'Yes' : 'No'}`);
+    if (socket) {
+      console.log(`🔍 Socket ID: ${socket.id}`);
+      console.log(`🔍 Socket connected: ${socket.connected}`);
+      console.log(`🔍 Socket disconnected: ${socket.disconnected}`);
     }
+    
+    if (socket && socket.connected && !socket.disconnected) {
+      try {
+        socket.emit(event, data);
+        console.log(`📤 Sent ${event} to user ${userId}`);
+        return true;
+      } catch (error) {
+        console.log(`❌ Error sending ${event} to user ${userId}:`, error.message);
+        // Remove the broken connection
+        this.removeConnection(socket.id);
+        return false;
+      }
+    }
+    
     console.log(`❌ User ${userId} not connected or socket not available`);
     return false;
   }
@@ -75,6 +93,26 @@ export class WebSocketConnectionManager {
     });
     console.log(`📤 Sent ${event} to ${sentCount}/${userIds.length} users`);
     return sentCount;
+  }
+
+  // Clean up stale connections
+  cleanupStaleConnections(): void {
+    const staleConnections: string[] = [];
+    
+    this.userConnections.forEach((socket, userId) => {
+      if (!socket.connected || socket.disconnected) {
+        staleConnections.push(socket.id);
+        console.log(`🧹 Cleaning up stale connection for user ${userId} (socket ${socket.id})`);
+      }
+    });
+    
+    staleConnections.forEach(socketId => {
+      this.removeConnection(socketId);
+    });
+    
+    if (staleConnections.length > 0) {
+      console.log(`🧹 Cleaned up ${staleConnections.length} stale connections`);
+    }
   }
 
   // Get connection stats

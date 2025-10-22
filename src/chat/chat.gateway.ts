@@ -6,6 +6,7 @@ import {
     WebSocketServer,
     OnGatewayConnection,
     OnGatewayDisconnect,
+    OnGatewayInit,
   } from '@nestjs/websockets';
   import { Server, Socket } from 'socket.io';
 import { MessageService } from '../message/message.service';
@@ -13,13 +14,17 @@ import { AuthService } from '../auth/auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { WebSocketConnectionManager } from './websocket-connection.manager';
 import { ConversationService } from '../conversation/conversation.service';
+import { WebSocketBroadcastService } from './websocket-broadcast.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User } from '../schemas/user.schema';
   
   @WebSocketGateway({
     cors: {
       origin: '*',
     },
   })
-  export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
     @WebSocketServer()
     server: Server;
   
@@ -29,7 +34,14 @@ import { ConversationService } from '../conversation/conversation.service';
       private readonly jwtService: JwtService,
       private readonly connectionManager: WebSocketConnectionManager,
       private readonly conversationService: ConversationService,
+      private readonly broadcastService: WebSocketBroadcastService,
+      @InjectModel(User.name) private readonly userModel: Model<User>,
     ) {}
+
+    afterInit(server: Server) {
+      console.log('🚀 WebSocket Gateway initialized');
+      this.broadcastService.setServer(server);
+    }
   
     async handleConnection(client: Socket) {
       console.log(`✅ Client connected: ${client.id}`);
@@ -66,6 +78,21 @@ import { ConversationService } from '../conversation/conversation.service';
         
         // Add to connection manager
         this.connectionManager.addConnection(payload.sub, client);
+
+        // Join a personal room to allow targeted emits by userId
+        try {
+          // Ensure only one active socket remains in the personal room
+          const existingSockets = await this.server.in(payload.sub).fetchSockets();
+          for (const s of existingSockets) {
+            if (s.id !== client.id) {
+              try { s.leave(payload.sub); } catch {}
+            }
+          }
+          client.join(payload.sub);
+          console.log(`🏷️ Client ${client.id} joined personal room: ${payload.sub}`);
+        } catch (e) {
+          console.log('⚠️ Failed to join personal room:', e?.message);
+        }
         
         console.log(`👤 Authenticated user ID: ${payload.sub}`);
         client.emit('authenticated', { 
@@ -237,6 +264,102 @@ import { ConversationService } from '../conversation/conversation.service';
           success: false,
           message: 'Internal server error',
         });
+      }
+    }
+
+    @SubscribeMessage('typing')
+    async handleTyping(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() data: { conversationId: string },
+    ) {
+      try {
+        const userId = client.data.user?.sub;
+        
+        if (!userId) {
+          console.log('❌ No userId found for typing event');
+          return;
+        }
+
+        // Debug: Check what's in the JWT payload
+        console.log('🔍 JWT Payload for typing event:', JSON.stringify(client.data.user, null, 2));
+        
+        // Fetch user details from database
+        const user = await this.userModel.findById(userId).select('name email').exec();
+        const userName = user?.name || 'Unknown User';
+        const userEmail = user?.email || '';
+
+        console.log(`⌨️ User ${userName} (${userId}) is typing in conversation ${data.conversationId}`);
+        
+        const typingEventData = {
+          success: true,
+          message: 'User is typing',
+          data: {
+            conversationId: data.conversationId,
+            userId: userId,
+            userName: userName,
+            userEmail: userEmail,
+            timestamp: new Date()
+          }
+        };
+        
+        console.log('📊 Typing Event Data Being Sent:', JSON.stringify(typingEventData, null, 2));
+        
+        // Broadcast typing event to all other members in the conversation room
+        // Exclude the sender by using the room broadcast
+        client.to(data.conversationId).emit('user_typing', typingEventData);
+        
+        console.log(`📡 Typing event broadcasted to conversation ${data.conversationId} (excluding sender)`);
+        
+      } catch (error) {
+        console.error('❌ Error handling typing event:', error);
+      }
+    }
+
+    @SubscribeMessage('stop_typing')
+    async handleStopTyping(
+      @ConnectedSocket() client: Socket,
+      @MessageBody() data: { conversationId: string },
+    ) {
+      try {
+        const userId = client.data.user?.sub;
+        
+        if (!userId) {
+          console.log('❌ No userId found for stop typing event');
+          return;
+        }
+
+        // Debug: Check what's in the JWT payload
+        console.log('🔍 JWT Payload for stop typing event:', JSON.stringify(client.data.user, null, 2));
+        
+        // Fetch user details from database
+        const user = await this.userModel.findById(userId).select('name email').exec();
+        const userName = user?.name || 'Unknown User';
+        const userEmail = user?.email || '';
+
+        console.log(`⌨️ User ${userName} (${userId}) stopped typing in conversation ${data.conversationId}`);
+        
+        const stopTypingEventData = {
+          success: true,
+          message: 'User stopped typing',
+          data: {
+            conversationId: data.conversationId,
+            userId: userId,
+            userName: userName,
+            userEmail: userEmail,
+            timestamp: new Date()
+          }
+        };
+        
+        console.log('📊 Stop Typing Event Data Being Sent:', JSON.stringify(stopTypingEventData, null, 2));
+        
+        // Broadcast stop typing event to all other members in the conversation room
+        // Exclude the sender by using the room broadcast
+        client.to(data.conversationId).emit('user_stopped_typing', stopTypingEventData);
+        
+        console.log(`📡 Stop typing event broadcasted to conversation ${data.conversationId} (excluding sender)`);
+        
+      } catch (error) {
+        console.error('❌ Error handling stop typing event:', error);
       }
     }
 

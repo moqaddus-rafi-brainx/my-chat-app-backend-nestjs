@@ -201,7 +201,9 @@ export class ConversationService {
       // Check if user is admin (for group conversations) or member (for direct conversations)
       if (conversation.type === ConversationType.GROUP) {
         // For group conversations, only admin can delete
-        if (conversation.adminId?.toString() !== userId) {
+        const adminIdStr = conversation.adminId?.toString();
+        const userIdStr = userId.toString();
+        if (adminIdStr !== userIdStr) {
           return {
             success: false,
             message: 'Only group admin can delete this conversation',
@@ -219,17 +221,29 @@ export class ConversationService {
         }
       }
       
+      // Get conversation details before deletion for WebSocket broadcast
+      const conversationDetails = {
+        id: conversation._id,
+        name: conversation.name,
+        type: conversation.type,
+        members: conversation.members,
+        adminId: conversation.adminId
+      };
+      
       // Delete all messages for this conversation first
       const messageDeleteResult = await this.messageModel.deleteMany({ conversationId: id });
       console.log(`🗑️ Deleted ${messageDeleteResult.deletedCount} messages for conversation: ${id}`);
       
       // Delete the conversation
       await this.conversationModel.findByIdAndDelete(id);
+      console.log(`🗑️ Deleted conversation: ${id}`);
       
       return {
         success: true,
         message: 'Conversation deleted successfully',
-        data: null
+        data: {
+          deletedConversation: conversationDetails
+        }
       };
     } catch (error) {
       console.error('❌ Error deleting conversation:', error);
@@ -252,6 +266,188 @@ export class ConversationService {
       console.log(`📅 Updated last activity for conversation: ${conversationId}`);
     } catch (error) {
       console.error('❌ Error updating conversation last activity:', error);
+    }
+  }
+
+  // Remove members from a conversation
+  async removeMember(conversationId: string, memberIdsToRemove: string[], requesterId: string) {
+    try {
+      // Find the conversation
+      const conversation = await this.conversationModel.findById(conversationId);
+      
+      if (!conversation) {
+        return {
+          success: false,
+          message: 'Conversation not found',
+          data: null
+        };
+      }
+
+      // Check if requester is admin
+      if (conversation.adminId?.toString() !== requesterId.toString()) {
+        return {
+          success: false,
+          message: 'Only group admin can remove members',
+          data: null
+        };
+      }
+
+      // Check if all members to remove are actually members
+      const invalidMembers = memberIdsToRemove.filter(
+        memberId => !conversation.members.some(
+          (member: any) => member.toString() === memberId
+        )
+      );
+
+      if (invalidMembers.length > 0) {
+        return {
+          success: false,
+          message: `Users are not members of this conversation: ${invalidMembers.join(', ')}`,
+          data: null
+        };
+      }
+
+      // Check if trying to remove admin (admin cannot remove themselves)
+      const adminInRemovalList = memberIdsToRemove.includes(conversation.adminId?.toString());
+      if (adminInRemovalList) {
+        return {
+          success: false,
+          message: 'Admin cannot remove themselves from the conversation',
+          data: null
+        };
+      }
+
+      // Remove the members from the conversation
+      const updatedConversation = await this.conversationModel.findByIdAndUpdate(
+        conversationId,
+        { 
+          $pull: { members: { $in: memberIdsToRemove } },
+          updatedAt: new Date()
+        },
+        { new: true }
+      ).populate('members', 'name email').exec();
+
+      if (!updatedConversation) {
+        return {
+          success: false,
+          message: 'Failed to remove members',
+          data: null
+        };
+      }
+
+      console.log(`👥 Removed ${memberIdsToRemove.length} members from conversation ${conversationId}:`, memberIdsToRemove);
+
+      return {
+        success: true,
+        message: `${memberIdsToRemove.length} member(s) removed successfully`,
+        data: {
+          conversation: updatedConversation.toObject(),
+          removedMemberIds: memberIdsToRemove
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error removing member:', error);
+      return {
+        success: false,
+        message: 'Failed to remove member',
+        data: null
+      };
+    }
+  }
+
+  // Leave a conversation (user removes themselves)
+  async leaveGroup(conversationId: string, userId: string) {
+    try {
+      // Find the conversation
+      const conversation = await this.conversationModel.findById(conversationId);
+      
+      if (!conversation) {
+        return {
+          success: false,
+          message: 'Conversation not found',
+          data: null
+        };
+      }
+
+      // Check if user is a member of the conversation
+      const isMember = conversation.members.some(
+        (member: any) => member.toString() === userId.toString()
+      );
+
+      if (!isMember) {
+        return {
+          success: false,
+          message: 'You are not a member of this conversation',
+          data: null
+        };
+      }
+
+      // Check if user is admin
+      const isAdmin = conversation.adminId?.toString() === userId.toString();
+      
+      let newAdminId: string | null = null;
+      let leftMembers = [userId];
+
+      // If user is admin, transfer admin to another member
+      if (isAdmin) {
+        // Find the first member who is not the current user
+        const otherMembers = conversation.members.filter(
+          (member: any) => member.toString() !== userId.toString()
+        );
+
+        if (otherMembers.length > 0) {
+          // Make the first other member the new admin
+          newAdminId = otherMembers[0].toString();
+          console.log(`👑 Admin transferred from ${userId} to ${newAdminId}`);
+        } else {
+          // If no other members, conversation will be deleted (handled by frontend)
+          console.log(`⚠️ Admin leaving with no other members - conversation should be deleted`);
+        }
+      }
+
+      // Remove the user from the conversation
+      const updateData: any = { 
+        $pull: { members: userId },
+        updatedAt: new Date()
+      };
+      
+      if (newAdminId) {
+        updateData.adminId = newAdminId;
+      }
+      
+      const updatedConversation = await this.conversationModel.findByIdAndUpdate(
+        conversationId,
+        updateData,
+        { new: true }
+      ).populate('members', 'name email').exec();
+
+      if (!updatedConversation) {
+        return {
+          success: false,
+          message: 'Failed to leave conversation',
+          data: null
+        };
+      }
+
+      console.log(`👥 User ${userId} left conversation ${conversationId}`);
+
+      return {
+        success: true,
+        message: 'Successfully left the conversation',
+        data: {
+          conversation: updatedConversation.toObject(),
+          leftMembers: leftMembers,
+          newAdminId: newAdminId,
+          wasAdmin: isAdmin
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error leaving conversation:', error);
+      return {
+        success: false,
+        message: 'Failed to leave conversation',
+        data: null
+      };
     }
   }
 }
