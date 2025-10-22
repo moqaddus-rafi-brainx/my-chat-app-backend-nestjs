@@ -11,7 +11,13 @@ async function bootstrap() {
   app.useWebSocketAdapter(new IoAdapter(app));
   
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '*',
+    origin: [
+      process.env.CORS_ORIGIN,
+      process.env.FRONTEND_URL,
+      'https://my-chat-app-frontend-two.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001'
+    ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,

@@ -21,7 +21,11 @@ import { User } from '../schemas/user.schema';
   
   @WebSocketGateway({
     cors: {
-      origin: process.env.WS_CORS_ORIGIN || process.env.CORS_ORIGIN || '*',
+      origin: [
+        'https://my-chat-app-frontend-two.vercel.app',
+        'http://localhost:3000',
+        'http://localhost:3001'
+      ].filter(Boolean),
       credentials: true,
     },
   })
