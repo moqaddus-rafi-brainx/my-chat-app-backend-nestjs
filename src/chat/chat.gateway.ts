@@ -21,7 +21,8 @@ import { User } from '../schemas/user.schema';
   
   @WebSocketGateway({
     cors: {
-      origin: '*',
+      origin: process.env.WS_CORS_ORIGIN || process.env.CORS_ORIGIN || '*',
+      credentials: true,
     },
   })
   export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
