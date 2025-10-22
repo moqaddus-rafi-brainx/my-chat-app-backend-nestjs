@@ -5,14 +5,13 @@ import { ValidationPipe } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
-  
   const app = await NestFactory.create(AppModule);
   
   // Configure WebSocket adapter
   app.useWebSocketAdapter(new IoAdapter(app));
   
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -21,13 +20,19 @@ async function bootstrap() {
   // Enable validation globally
   app.useGlobalPipes(new ValidationPipe());
 
-  // Set global API prefix
-  app.setGlobalPrefix('api/v1');
-  const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT') || 4000;
+  // Set global API prefix, but exclude root routes
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['/', '/health']
+  });
   
-
-  await app.listen(process.env.PORT ?? 4000);
+  const port = process.env.PORT || 4000;
+  await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);
 }
-bootstrap();
+
+// For Vercel serverless
+if (process.env.NODE_ENV === 'production') {
+  bootstrap();
+} else {
+  bootstrap();
+}
