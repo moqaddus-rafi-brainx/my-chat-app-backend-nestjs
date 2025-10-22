@@ -7,7 +7,7 @@ export class UserController {
 
 
   @Get()
-  findAll(@Query() query: any) {
+  async findAll(@Query() query: any) {
     return this.userService.findAll(query);
   }
 }
