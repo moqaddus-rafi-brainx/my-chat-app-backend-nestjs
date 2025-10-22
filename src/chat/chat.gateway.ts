@@ -22,6 +22,8 @@ import { User } from '../schemas/user.schema';
   @WebSocketGateway({
     cors: {
       origin: [
+        process.env.WS_CORS_ORIGIN,
+        process.env.CORS_ORIGIN,
         'https://my-chat-app-frontend-two.vercel.app',
         'http://localhost:3000',
         'http://localhost:3001'
@@ -45,11 +47,26 @@ import { User } from '../schemas/user.schema';
 
     afterInit(server: Server) {
       console.log('🚀 WebSocket Gateway initialized');
+      console.log('🌐 WebSocket CORS origins:', [
+        process.env.WS_CORS_ORIGIN,
+        process.env.CORS_ORIGIN,
+        'https://my-chat-app-frontend-two.vercel.app',
+        'http://localhost:3000',
+        'http://localhost:3001'
+      ].filter(Boolean));
+      
+      // Check if we're in Vercel serverless environment
+      if (process.env.VERCEL) {
+        console.log('⚠️ Running in Vercel serverless - WebSocket may have limitations');
+      }
+      
       this.broadcastService.setServer(server);
     }
   
     async handleConnection(client: Socket) {
       console.log(`✅ Client connected: ${client.id}`);
+      console.log('🌐 WebSocket Origin:', client.handshake.headers.origin);
+      console.log('🌐 WebSocket Headers:', client.handshake.headers);
       
       try {
         // Get token from auth object or headers

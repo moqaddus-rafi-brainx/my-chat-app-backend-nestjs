@@ -72,6 +72,11 @@ module.exports = async (req, res) => {
       return;
     }
 
+    // Handle Socket.IO requests
+    if (req.url.startsWith('/socket.io/')) {
+      console.log('Handling Socket.IO request:', req.url);
+    }
+
     const app = await createApp();
     const server = app.getHttpAdapter().getInstance();
     server(req, res);
